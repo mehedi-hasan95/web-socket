@@ -1,0 +1,1 @@
+ALTER TABLE "matches" DROP COLUMN "start_at";
