@@ -32,6 +32,9 @@ matchRouter.post("/", async (req, res) => {
 
   try {
     const [data] = await db.insert(matches).values(parsed.data).returning();
+    if (res.app.locals.broadcastMatchCreated) {
+      res.app.locals.broadcastMatchCreated(data);
+    }
     res.status(201).json({ data });
   } catch (error) {
     res.status(500).json({
