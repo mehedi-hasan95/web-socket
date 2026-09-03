@@ -1,0 +1,1 @@
+ALTER TABLE "matches" ADD COLUMN "start_at" timestamp NOT NULL;

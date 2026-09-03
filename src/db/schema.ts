@@ -37,12 +37,7 @@ export const matches = pgTable("matches", {
   homeTeam: text("home_team").notNull(),
   awayTeam: text("away_team").notNull(),
   status: matchStatusEnum("status").notNull().default("scheduled"),
-  startAt: timestamp("start_at", {
-    withTimezone: true,
-  })
-    .defaultNow()
-    .$onUpdate(() => new Date())
-    .notNull(),
+  startAt: timestamp("start_at").notNull(),
   homeScore: integer("home_score").notNull().default(0),
   awayScore: integer("away_score").notNull().default(0),
   ...timestamps,
