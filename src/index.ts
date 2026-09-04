@@ -3,6 +3,7 @@ import { matchRouter } from "./db/routes/matches";
 import { createServer } from "http";
 import { attachWebSocketServer } from "./ws/server";
 import { securityMiddleware } from "./arcjet";
+import { commentaryRouter } from "./db/routes/commentaries";
 
 const PORT = Number(process.env.PORT) || 8000;
 const HOST = process.env.HOST;
@@ -18,6 +19,7 @@ app.get("/", (req: Request, res: Response) => {
 app.use(securityMiddleware());
 
 app.use("/matches", matchRouter);
+app.use("/matches/:id/commentary", commentaryRouter);
 
 const { broadcastMatchCreated } = attachWebSocketServer(server);
 app.locals.broadcastMatchCreated = broadcastMatchCreated;

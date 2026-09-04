@@ -23,3 +23,20 @@ export const matchValidator = z
       });
     }
   });
+
+export const commentaryValidator = z.object({
+  matchId: z.coerce.number(),
+  minutes: z.coerce.number().int().positive().optional(),
+  sequence: z.coerce.number().int().positive().optional(),
+  period: z.string().optional(),
+  eventType: z.string().optional(),
+  actor: z.string().optional(),
+  team: z.string().optional(),
+  message: z.string(),
+  tags: z.array(z.string()).optional(),
+  metadata: z.record(z.string(), z.any()).optional(),
+});
+
+export const commentariesParams = z.object({
+  id: z.string(),
+});

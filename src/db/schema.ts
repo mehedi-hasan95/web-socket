@@ -1,5 +1,6 @@
 import { defineRelations } from "drizzle-orm";
 import {
+  index,
   integer,
   jsonb,
   pgEnum,
@@ -61,7 +62,7 @@ export const commentaries = pgTable(
     metadata: jsonb("metadata"),
     ...timestamps,
   },
-  (table) => [uniqueIndex("commentaries_match_id_idx").on(table.matchId)],
+  (table) => [index("commentaries_match_id_idx").on(table.matchId)],
 );
 
 export const schemaRelations = defineRelations(
