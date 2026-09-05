@@ -40,6 +40,10 @@ commentaryRouter.post("/", async (req, res) => {
       .values(bodyData.data)
       .returning();
 
+    if (res.app.locals.broadcastCommentary) {
+      res.app.locals.broadcastCommentary(data?.matchId, data);
+    }
+
     return res.status(201).json({ data });
   } catch (error) {
     console.error("Failed to create commentary", error);
