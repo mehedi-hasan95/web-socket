@@ -5,20 +5,98 @@ import { wsArcjet } from "../arcjet";
 
 interface ExtWebSocket extends WebSocket {
   isAlive?: boolean;
+  subscriptions?: Set<number>;
 }
 
-function sendJson(socket: WebSocket, payload: { type: string }) {
+interface IncomingMessage {
+  type: "subscribe" | "unsubscribe" | string;
+  matchId?: number;
+}
+
+interface OutgoingPayload {
+  type: string;
+  matchId?: number;
+  message?: string;
+}
+
+const matchSubscribers = new Map<number, Set<ExtWebSocket>>();
+
+function subscribe(matchId: number, socket: ExtWebSocket) {
+  if (!matchSubscribers.has(matchId)) {
+    matchSubscribers.set(matchId, new Set());
+  }
+  matchSubscribers.get(matchId)!.add(socket);
+}
+
+function unsubscribe(matchId: number, socket: ExtWebSocket) {
+  const subscribers = matchSubscribers.get(matchId);
+  if (!subscribers) return;
+  subscribers.delete(socket);
+  if (subscribers.size === 0) {
+    matchSubscribers.delete(matchId);
+  }
+}
+
+function cleanupSubscription(socket: ExtWebSocket) {
+  if (!socket.subscriptions) return;
+  for (const matchId of socket.subscriptions) {
+    unsubscribe(matchId, socket);
+  }
+  socket.subscriptions.clear();
+}
+
+function sendJson(socket: WebSocket, payload: OutgoingPayload) {
   if (socket.readyState !== WebSocket.OPEN) return;
   socket.send(JSON.stringify(payload));
 }
 
-function broadcast(
+function broadcastToAll(
   wss: WebSocketServer,
   payload: { type: string; data: MATCH_TYPE },
 ) {
+  const message = JSON.stringify(payload);
   for (const client of wss.clients) {
     if (client.readyState !== WebSocket.OPEN) continue;
-    client.send(JSON.stringify(payload));
+    client.send(message);
+  }
+}
+
+function broadcastToMatch<T>(
+  matchId: number,
+  payload: { type: string; data: T },
+) {
+  const subscribers = matchSubscribers.get(matchId);
+  if (!subscribers || subscribers.size === 0) return;
+  const message = JSON.stringify(payload);
+  for (const client of subscribers) {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(message);
+    }
+  }
+}
+
+function handleMessage(socket: ExtWebSocket, data: WebSocket.RawData) {
+  let message: IncomingMessage;
+  try {
+    message = JSON.parse(data.toString());
+  } catch (error) {
+    sendJson(socket, { type: "Error", message: "Invalid JSON" });
+    return;
+  }
+
+  if (message.type === "subscribe" && Number.isInteger(message.matchId)) {
+    const matchId = message.matchId as number;
+    subscribe(matchId, socket);
+    socket.subscriptions?.add(matchId);
+    sendJson(socket, { type: "subscribe", matchId });
+    return;
+  }
+
+  if (message.type === "unsubscribe" && Number.isInteger(message.matchId)) {
+    const matchId = message.matchId as number;
+    unsubscribe(matchId, socket);
+    socket.subscriptions?.delete(matchId);
+    sendJson(socket, { type: "unsubscribe", matchId });
   }
 }
 
@@ -36,7 +114,7 @@ export function attachWebSocketServer(server: HttpServer) {
         if (decision.isDenied()) {
           const code = decision.reason.isRateLimit() ? 1013 : 1008;
           const reason = decision.reason.isRateLimit()
-            ? "Too many request"
+            ? "Too many requests"
             : "Access denied";
           socket.close(code, reason);
           return;
@@ -52,8 +130,23 @@ export function attachWebSocketServer(server: HttpServer) {
     socket.on("pong", () => {
       socket.isAlive = true;
     });
+
+    socket.subscriptions = new Set();
+
     sendJson(socket, { type: "welcome" });
-    socket.on("error", console.error);
+
+    socket.on("message", (data) => {
+      handleMessage(socket, data);
+    });
+
+    socket.on("error", (err) => {
+      console.error(err);
+      socket.terminate();
+    });
+
+    socket.on("close", () => {
+      cleanupSubscription(socket);
+    });
   });
 
   const interval = setInterval(() => {
@@ -69,7 +162,12 @@ export function attachWebSocketServer(server: HttpServer) {
   server.on("close", cleanup);
 
   function broadcastMatchCreated(match: MATCH_TYPE) {
-    broadcast(wss, { type: "match_created", data: match });
+    broadcastToAll(wss, { type: "match_created", data: match });
   }
-  return { broadcastMatchCreated };
+
+  function broadcastCommentary<T>(matchId: number, comment: T) {
+    broadcastToMatch(matchId, { type: "commentary", data: comment });
+  }
+
+  return { broadcastMatchCreated, broadcastCommentary };
 }
